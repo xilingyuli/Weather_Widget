@@ -570,22 +570,32 @@ DataSource 适配规则：
     ↓
 AppWidgetProvider.onUpdate()
     ↓
-PendingIntent → WorkManager (OneTimeWorkRequest)
-    ↓ [周期性]
-PeriodicWorkRequest (最小间隔15min)
+WorkManager PeriodicWorkRequest (30min)
     ↓
 WeatherRefreshWorker.doWork()
     ↓
-WeatherRepository.getCurrentWeather(location)
+fetch current + daily(7d) + hourly(24h) from Repository
     ↓
-Result<WeatherNow> → 成功则 RemoteViews.update() + AppWidgetManager.updateAppWidget()
-                    → 失败则 RemoteViews 显示"点击重试"
+success → RemoteViews.update() + AppWidgetManager.updateAppWidget()
+failure → RemoteViews 显示 "--" 占位
+
+Widget layout (5×2):
+  ┌──────────────────────────────────────────┐
+  │  MM/dd                    temp° 天气状况  │ weight=2
+  │  HH:mm                                   │
+  ├──────┬──────┬──────┬──────┬──────────────┤
+  │slot 1│slot 2│slot 3│slot 4│ slot 5       │ weight=1
+  └──────┴──────┴──────┴──────┴──────────────┘
+
+  bottom row: click to toggle hourly/daily mode → triggers refresh
+  container: click to open MainActivity
 ```
 
 关键设计点：
 - WorkManager 自动处理 Doze/网络约束/重试
 - 刷新间隔 30min（兼顾实时性和配额），可配置
-- 数据源切换时从 DataStore 读，重启 worker 即刻生效
+- bottom row 切换逐时/逐天模式，状态按 widgetId 存 SharedPreferences
+- top row 显示实况温度+天气，bottom row 展示5格逐时或逐日预报
 
 ## 数据源 n选1 切换方案
 

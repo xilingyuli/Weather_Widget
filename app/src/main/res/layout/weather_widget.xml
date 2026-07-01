@@ -3,35 +3,93 @@
     android:id="@+id/widget_container"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:gravity="center"
     android:orientation="vertical"
-    android:padding="12dp"
-    android:background="#E0EEEEEE">
+    android:background="#E8EEEEEE"
+    android:weightSum="3">
 
-    <TextView
-        android:id="@+id/widget_temp"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="--°"
-        android:textSize="48sp"
-        android:textColor="#333333"
-        android:textStyle="bold" />
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="2"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="2dp">
 
-    <TextView
-        android:id="@+id/widget_condition"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="加载中"
-        android:textSize="16sp"
-        android:textColor="#666666"
-        android:layout_marginTop="4dp" />
+        <LinearLayout
+            android:id="@+id/widget_left"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <ImageView
-        android:id="@+id/widget_refresh"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
-        android:layout_marginTop="8dp"
-        android:src="@android:drawable/ic_menu_rotate"
-        android:contentDescription="刷新" />
+            <TextView
+                android:id="@+id/widget_date"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="--/--"
+                android:textSize="14sp"
+                android:textColor="#555555" />
 
+            <TextView
+                android:id="@+id/widget_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="--:--"
+                android:textSize="22sp"
+                android:textColor="#333333"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/widget_right"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            xmlns:app="http://schemas.android.com/apk/res-auto">
+
+            <TextView
+                android:id="@+id/widget_temp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="--°"
+                android:textSize="40sp"
+                android:textColor="#333333"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/widget_condition"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="加载中"
+                android:textSize="14sp"
+                android:textColor="#666666" />
+        </LinearLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <LinearLayout
+        android:id="@+id/widget_bottom"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal"
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp"
+        android:paddingBottom="4dp"
+        android:gravity="center">
+
+        <TextView android:id="@+id/widget_slot1" style="@style/WidgetSlot" />
+        <TextView android:id="@+id/widget_slot2" style="@style/WidgetSlot" />
+        <TextView android:id="@+id/widget_slot3" style="@style/WidgetSlot" />
+        <TextView android:id="@+id/widget_slot4" style="@style/WidgetSlot" />
+        <TextView android:id="@+id/widget_slot5" style="@style/WidgetSlot" />
+    </LinearLayout>
 </LinearLayout>
