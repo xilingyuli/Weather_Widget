@@ -664,8 +664,8 @@ last_update      // 最新刷新时间戳
 
 **第二次测试（用户 Token & AppKey）：**
 - URL: `https://api.caiyunapp.com/v2.6/{token}/{lon},{lat}/weather?lang=zh_CN`
-- Token: `REDACTED` → `quota is exhausted`（Token 有效，但无可用额度）
-- AppKey: `REDACTED` + AppSecret → 同上
+- 测试 Token → `quota is exhausted`（Token 有效，但无可用额度）
+- AppKey + AppSecret → 同上
 - **结论：请求格式完全正确，凭据有效，但账号免费额度未激活**
 - 测试位置：北京昌平 `116.231204,40.220660`，平顶山卫东区 `113.3302298,33.7364538`
 - 坐标系: WGS-84，彩云要求经度在前（`lon,lat`）
@@ -698,7 +698,7 @@ Headers: x-cy-nonce, x-cy-timestamp, x-cy-signature
 ### Build System
 - **AGP**: 9.2.0
 - **Gradle**: 9.4.1
-- **JDK**: 26.0.1 (Homebrew `REDACTED`)
+- **JDK**: 26.0.1 (Homebrew)
 - **Flags**: `android.builtInKotlin=false`, `android.newDsl=false`
 
 ### API Key & Host Changes (vs initial research)
@@ -706,7 +706,7 @@ Headers: x-cy-nonce, x-cy-timestamp, x-cy-signature
 |-------------|------|------|-------|
 | **WeatherCN** | `openapi.weathercn.com` | `?apikey=<key>` | NOT the old HMAC-based `apidev.weathercn.com`; docs at `platform.weathercn.com/apidoc/` |
 | **QWeather** | `{id}.re.qweatherapi.com` (per-developer custom) | `X-QW-Api-Key` header | Public `devapi.qweather.com` deprecated since 2026 |
-| **Caiyun** | `api.caiyunapp.com/v2.6` | Token in URL path `/{token}/` | Token `REDACTED` working after quota issue resolved |
+| **Caiyun** | `api.caiyunapp.com/v2.6` | Token in URL path `/{token}/` | Token working after quota issue resolved |
 
 ### Data Source Test Results (all working as of 2026-06-22)
 - **WeatherCN**: Beijing (LocationKey `101924`) → 22°C, rain ✓
@@ -720,7 +720,7 @@ Headers: x-cy-nonce, x-cy-timestamp, x-cy-signature
 ### Key Decisions
 - **Default data source**: WeatherCN (华风天气)
 - **Default city**: Beijing (WeatherCN LocationKey `101924`)
-- **API keys in BuildConfig**: via `buildConfigField` in `app/build.gradle.kts` (personal project, no financial loss if leaked)
+- **API keys in BuildConfig**: via `buildConfigField` from `api_keys.properties`
 - **Coroutine in Worker**: `runBlocking` to call suspend repository methods from `Worker.doWork()`
 
 ### Relevant Files
