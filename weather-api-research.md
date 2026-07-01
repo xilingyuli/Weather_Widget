@@ -346,9 +346,11 @@ GET https://api.caiyunapp.com/v2.6/TOKEN/116.3176,39.9760/weather?alert=true&dai
 | GB/T 2260 (Adcode) | `110000` | `110108` | `110105` | ✅ **国家标准** |
 | 彩云 | 无ID，纯经纬度 | — | — | — |
 
-和风 LocationID 结构：`101` + 2位省码 + 2位市码 + 2位区码，并非国家标准。
+和风 LocationID 结构：`101` + 2位省码 + 2位市码 + 2位区码，和风自有编码，并非国家标准。
 
-GB/T 2260（Adcode）是国家标准行政区划代码：6位数字，全国统一，粒度到区县级。**Adcode 最适合作为统一内部 ID。**
+GB/T 2260（Adcode）是国家标准行政区划代码：6位数字，区县级粒度，全国统一，民政部维护。不依赖任何天气服务商，和风也支持直接用 Adcode 查询。
+
+**最终采用 Adcode 作为内部统一 ID，格式 `省名_区名_adcode`。** 演化过程：初始各自用数据源 ID → 发现和风 LocationID 非标准 → 找到 Adcode 国家标准 → 最终定为 `北京市_海淀区_110108`（仅市级用 `北京市_110000`）。
 
 **三数据源位置参数要求：**
 
@@ -510,6 +512,8 @@ DataSource 适配规则：
 - WcnImpl: 优先用 `locationKey`，fallback 经纬度（自行转 GCJ-02）
 - CaiyunImpl: 始终用经纬度
 
+设计要点：基类只放通用字段，数据源专有字段放到子类；命名用可读中文（province/city/district 而非 adm1/adm2）；时区不放位置模型，DataSource 内部自行处理。
+
 ## Widget 更新机制
 
 ```
@@ -554,6 +558,10 @@ Repository → 读 DataStore → 获取当前激活的 DataSource 实现
 
 ## 存储命名规划
 
+**选型：SharedPreferences + ViewModel 层内存缓存，不用 Room。** 天气数据量极小，SP 无性能瓶颈，读写模式简单（全部写入/全部读取），不需要 Room 的额外复杂度。
+
+**JSON 结构：彩云风格（按变量分数组），非扁平化。** 按变量分数组比扁平记录更适合按维度查询（只看温度/降水曲线），与彩云 API 结构一致，DataSource 内映射成本最低。
+
 SP 命名：
 - 总: `weather_locations` — 所有已添加城市列表
 - 每城市: `weather_loc_{id}` — 如 `weather_loc_北京市_海淀区_110108`
@@ -570,73 +578,13 @@ last_update      // 最新刷新时间戳
 - 前缀 `d_` / `h_` / `m_` 一眼区分层级，后段标准时间格式，不存在误用
 - `now` 和 `last_update` 无前缀，最常读写
 
-## 设计决策记录
-
-### 数据存储方案
-
-**选型：SharedPreferences + ViewModel 层内存缓存，不用 Room。**
-
-理由：天气数据量极小（几个城市 ×几天），SP 无性能瓶颈。读写模式简单（全部写入/全部读取），不需要 Room Entity/DAO/Migration 的复杂度。
-
-**JSON 结构：彩云风格（按变量分数组），非扁平化。**
-
-```
-{
-  "temperature": [{ "date": "2026-06-22", "max":30, "min":22, "avg":26 }, ...],
-  "precipitation": [{ "date": "2026-06-22", "max":0, "probability":10 }, ...],
-  "skycon": [{ "date": "2026-06-22", "value": "CLEAR_DAY" }, ...],
-  "wind": [{ "date": "2026-06-22", "speed":10, "direction":180 }, ...]
-}
-```
-
-理由：按变量分数组比扁平记录更适合按维度查询（只看温度曲线/降水概率），与彩云 API 原始结构一致，DataSource 内映射成本最低。
-
-**Key 命名：语义化前缀区分时间粒度，不用毫秒时间戳。**
-- `now` — 实时数据
-- `d_YYYYMMDD` — 日级预报
-- `h_YYYYMMDD_HH` — 小时级预报
-- `m_YYYYMMDD_HHmm` — 分钟级数据
-- `last_update` — 最新刷新时间戳
-
-写入时直接覆盖同名 key，天然保证最新数据。Widget 读取直接按 key 取，不用遍历找最新。
-
-### 位置 ID 演化
-
-**最终方案：GB/T 2260 Adcode（国家标准行政区划代码）作为统一内部 ID。**
-
-演化链：
-1. 初始：各自用数据源 ID，基类存三个字段
-2. 发现和风 LocationID 并非国家标准，是和风自有编码
-3. 找到 GB/T 2260 Adcode（如 `110108`），6 位区县级粒度，全国统一，和风也支持直接用 Adcode 查询
-4. 最终 ID 格式：`省名_区名_adcode`，如 `北京市_海淀区_110108`。仅有市级用 `北京市_110000`
-
-SP 表名：`weather_loc_{id}`，如 `weather_loc_北京市_海淀区_110108`。
-
-### 位置数据模型
-
-**基类只放通用字段，数据源专有字段放到子类（Sealed Class）。**
-
-- 基类字段：id、name、province、city、district、country、latitude、longitude
-- 和风子类 `QwLocation` 额外存 `locationId: String`
-- 华风子类 `WcnLocation` 额外存 `locationKey: String`
-- 彩云用 `SimpleLocation`，不需要额外字段
-- 命名用全中文可读（province/city/district），不用 adm1/adm2
-- 时区不放位置信息里，属于时间范畴，DataSource 内部自行处理
-
-### 其他架构决策
-
-- 降级与切换合并：只做手动切换，不做自动降级。限流/超量视为失败类型，失败后手动切
-- 多城市预留：数据结构和接口支持，功能延后
-- 位置获取：定位和城市封装成统一对象，核心逻辑不关心来源
-- 技术栈：传统 XML layout + 手动工厂 DI，不选 Compose/Hilt
-
 ## 补充规划
 
 | 类别 | 当前缺失 | 建议方案 |
 |------|---------|---------|
 | 数据源健康检查 | Key 过期无感知 | 切换前 `healthCheck()` 探活 |
 | 限流与配额管理 | 超量后无提示 | DataSource 内部计数，接近阈值告警 |
-| 降级策略 | 主数据源不可用 | 支持降级链 A→B→C |
+| 降级策略 | 主数据源不可用 | 不做自动降级，失败后手动切数据源 |
 | 多城市管理 | 仅单城市 | SP/DataStore 存城市列表 |
 | 离线缓存 | 无网络时空白 | SP 缓存最近数据 + 标注"离线" |
 | 权限流程 | 未规划 | 首次引导授权，拒绝后手动选城市 |
@@ -657,7 +605,7 @@ Phase 2 (完善期):
   SP 缓存 + 多城市管理 + 多数据源架构 + 设置页
 
 Phase 3 (增强期):
-  数据源切换 UI + 降级策略 + 限流管理 + 深色 Widget
+  数据源切换 UI + 限流管理 + 深色 Widget
 ```
 
 ## 实际实现记录
