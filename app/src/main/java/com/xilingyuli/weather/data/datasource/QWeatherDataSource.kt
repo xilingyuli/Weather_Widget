@@ -3,10 +3,9 @@ package com.xilingyuli.weather.data.datasource
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import com.xilingyuli.weather.data.model.QwLocation
+import com.xilingyuli.weather.data.model.WeatherCurrent
 import com.xilingyuli.weather.data.model.WeatherDaily
-import com.xilingyuli.weather.data.model.WeatherHourly
 import com.xilingyuli.weather.data.model.WeatherLocation
-import com.xilingyuli.weather.data.model.WeatherNow
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
@@ -26,14 +25,14 @@ class QWeatherDataSource(
 
     private val gson = Gson()
 
-    override suspend fun getCurrentWeather(location: WeatherLocation): Result<WeatherNow> = runCatching {
+    override suspend fun getCurrentWeather(location: WeatherLocation): Result<WeatherCurrent> = runCatching {
         val locId = getLocationParam(location)
         val url = "https://$apiHost/v7/weather/now?location=$locId"
         val response = client.newCall(Request.Builder().url(url).get().build()).execute()
         val body = response.body?.string() ?: throw Exception("Empty response")
         val data = gson.fromJson(body, QwNowResponse::class.java)
         if (data.code != "200") throw Exception("QWeather error: ${data.code}")
-        data.toWeatherNow()
+        data.toWeatherCurrent(location)
     }
 
     override suspend fun getDailyForecast(location: WeatherLocation, days: Int): Result<List<WeatherDaily>> = runCatching {
@@ -49,10 +48,10 @@ class QWeatherDataSource(
         val body = response.body?.string() ?: throw Exception("Empty response")
         val data = gson.fromJson(body, QwDailyResponse::class.java)
         if (data.code != "200") throw Exception("QWeather error: ${data.code}")
-        data.daily.map { it.toWeatherDaily() }
+        data.daily.map { it.toWeatherDaily(location) }
     }
 
-    override suspend fun getHourlyForecast(location: WeatherLocation, hours: Int): Result<List<WeatherHourly>> = runCatching {
+    override suspend fun getHourlyForecast(location: WeatherLocation, hours: Int): Result<List<WeatherCurrent>> = runCatching {
         val locId = getLocationParam(location)
         val hourEndpoint = when {
             hours <= 24 -> "24h"
@@ -65,7 +64,7 @@ class QWeatherDataSource(
         val body = response.body?.string() ?: throw Exception("Empty response")
         val data = gson.fromJson(body, QwHourlyResponse::class.java)
         if (data.code != "200") throw Exception("QWeather error: ${data.code}")
-        data.hourly.map { it.toWeatherHourly() }
+        data.hourly.map { it.toWeatherCurrent(location) }
     }
 
     private fun getLocationParam(location: WeatherLocation): String {
@@ -79,20 +78,25 @@ class QWeatherDataSource(
         @SerializedName("code") var code: String = ""
         @SerializedName("now") var now: QwNowItem? = null
 
-        fun toWeatherNow(): WeatherNow {
+        fun toWeatherCurrent(location: WeatherLocation): WeatherCurrent {
             val item = now ?: throw Exception("No now data")
-            return WeatherNow(
-                temp = item.temp.toDoubleOrNull() ?: 0.0,
-                feelsLike = item.feelsLike.toDoubleOrNull() ?: 0.0,
+            return WeatherCurrent(
                 condition = item.text,
-                humidity = item.humidity.toIntOrNull() ?: 0,
+                windDir = item.windDir.ifBlank { null },
                 windSpeed = item.windSpeed.toDoubleOrNull() ?: 0.0,
-                windDir = item.windDir,
-                pressure = item.pressure.toDoubleOrNull() ?: 0.0,
+                windScale = item.windScale.ifBlank { null },
                 precip = item.precip.toDoubleOrNull() ?: 0.0,
-                visibility = item.vis.toDoubleOrNull() ?: 0.0,
-                cloudCover = item.cloud.toIntOrNull() ?: 0,
-                updateTime = item.obsTime,
+                humidity = item.humidity.toIntOrNull(),
+                pressure = item.pressure.toDoubleOrNull(),
+                visibility = item.vis.toDoubleOrNull(),
+                cloudCover = item.cloud.toIntOrNull(),
+                validTime = item.obsTime.ifBlank { null },
+                location = location,
+                temp = item.temp.toDoubleOrNull() ?: 0.0,
+                feelsLike = item.feelsLike.toDoubleOrNull(),
+                pop = null,
+                dewPoint = item.dew.toDoubleOrNull(),
+                updateTime = item.obsTime.ifBlank { null },
                 sourceLabel = "和风天气",
             )
         }
@@ -131,20 +135,35 @@ class QWeatherDataSource(
         @SerializedName("textNight") var textNight: String = ""
         @SerializedName("windDirDay") var windDirDay: String = ""
         @SerializedName("windScaleDay") var windScaleDay: String = ""
+        @SerializedName("windSpeedDay") var windSpeedDay: String = ""
         @SerializedName("precip") var precip: String = ""
         @SerializedName("uvIndex") var uvIndex: String = ""
+        @SerializedName("humidity") var humidity: String = ""
+        @SerializedName("pressure") var pressure: String = ""
+        @SerializedName("vis") var vis: String = ""
+        @SerializedName("cloud") var cloud: String = ""
+        @SerializedName("sunrise") var sunrise: String = ""
+        @SerializedName("sunset") var sunset: String = ""
 
-        fun toWeatherDaily(): WeatherDaily {
+        fun toWeatherDaily(location: WeatherLocation): WeatherDaily {
             return WeatherDaily(
-                date = fxDate,
+                condition = textDay.ifBlank { textNight },
+                windDir = windDirDay.ifBlank { null },
+                windSpeed = windSpeedDay.toDoubleOrNull() ?: 0.0,
+                windScale = windScaleDay.ifBlank { null },
+                precip = precip.toDoubleOrNull() ?: 0.0,
+                humidity = humidity.toIntOrNull(),
+                pressure = pressure.toDoubleOrNull(),
+                visibility = vis.toDoubleOrNull(),
+                cloudCover = cloud.toIntOrNull(),
+                validTime = fxDate.ifBlank { null },
+                location = location,
                 tempMax = tempMax.toDoubleOrNull() ?: 0.0,
                 tempMin = tempMin.toDoubleOrNull() ?: 0.0,
-                conditionDay = textDay,
-                conditionNight = textNight,
-                windDir = windDirDay,
-                windScale = windScaleDay,
-                precip = precip.toDoubleOrNull() ?: 0.0,
-                uvIndex = uvIndex.toIntOrNull() ?: 0,
+                conditionNight = textNight.ifBlank { null },
+                uvIndex = uvIndex.toIntOrNull(),
+                sunrise = sunrise.ifBlank { null },
+                sunset = sunset.ifBlank { null },
             )
         }
     }
@@ -161,18 +180,33 @@ class QWeatherDataSource(
         @SerializedName("text") var text: String = ""
         @SerializedName("windDir") var windDir: String = ""
         @SerializedName("windScale") var windScale: String = ""
+        @SerializedName("windSpeed") var windSpeed: String = ""
         @SerializedName("precip") var precip: String = ""
         @SerializedName("pop") var pop: String = ""
+        @SerializedName("humidity") var humidity: String = ""
+        @SerializedName("pressure") var pressure: String = ""
+        @SerializedName("cloud") var cloud: String = ""
+        @SerializedName("dew") var dew: String = ""
 
-        fun toWeatherHourly(): WeatherHourly {
-            return WeatherHourly(
-                time = fxTime,
-                temp = temp.toDoubleOrNull() ?: 0.0,
+        fun toWeatherCurrent(location: WeatherLocation): WeatherCurrent {
+            return WeatherCurrent(
                 condition = text,
-                windDir = windDir,
-                windScale = windScale,
+                windDir = windDir.ifBlank { null },
+                windSpeed = windSpeed.toDoubleOrNull() ?: 0.0,
+                windScale = windScale.ifBlank { null },
                 precip = precip.toDoubleOrNull() ?: 0.0,
-                pop = pop.toIntOrNull() ?: 0,
+                humidity = humidity.toIntOrNull(),
+                pressure = pressure.toDoubleOrNull(),
+                visibility = null,
+                cloudCover = cloud.toIntOrNull(),
+                validTime = fxTime.ifBlank { null },
+                location = location,
+                temp = temp.toDoubleOrNull() ?: 0.0,
+                feelsLike = null,
+                pop = pop.toIntOrNull(),
+                dewPoint = dew.toDoubleOrNull(),
+                updateTime = null,
+                sourceLabel = "",
             )
         }
     }

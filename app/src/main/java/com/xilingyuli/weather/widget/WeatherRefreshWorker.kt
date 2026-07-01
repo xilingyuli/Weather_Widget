@@ -12,7 +12,6 @@ import androidx.work.Worker
 import androidx.work.WorkerParameters
 import com.xilingyuli.weather.R
 import com.xilingyuli.weather.di.AppContainer
-import com.xilingyuli.weather.ui.Defaults
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.TimeUnit
 
@@ -24,10 +23,11 @@ class WeatherRefreshWorker(
     override fun doWork(): Result {
         return try {
             val repository = AppContainer.getWeatherRepository()
-            val result = runBlocking { repository.getCurrentWeather(Defaults.BEIJING) }
+            val mainLocation = repository.getMainLocation() ?: return Result.failure()
+            val result = runBlocking { repository.getCurrentWeather(mainLocation) }
             result.fold(
-                onSuccess = { now ->
-                    updateWidget(now.temp.toInt().toString(), now.condition)
+                onSuccess = { current ->
+                    updateWidget(current.temp.toInt().toString(), current.condition)
                     Result.success()
                 },
                 onFailure = {

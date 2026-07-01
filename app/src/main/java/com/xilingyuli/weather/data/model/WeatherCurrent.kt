@@ -1,6 +1,6 @@
 package com.xilingyuli.weather.data.model
 
-data class WeatherDaily(
+data class WeatherCurrent(
     override val condition: String,
     override val windDir: String?,
     override val windSpeed: Double,
@@ -12,10 +12,10 @@ data class WeatherDaily(
     override val cloudCover: Int?,
     override val validTime: String?,
     override val location: WeatherLocation,
-    val tempMax: Double,
-    val tempMin: Double,
-    val conditionNight: String? = null,
-    val uvIndex: Int? = null,
-    val sunrise: String? = null,
-    val sunset: String? = null,
+    val temp: Double,
+    val feelsLike: Double? = null,
+    val pop: Int? = null,
+    val dewPoint: Double? = null,
+    val updateTime: String? = null,
+    val sourceLabel: String = "",
 ) : WeatherRecord()

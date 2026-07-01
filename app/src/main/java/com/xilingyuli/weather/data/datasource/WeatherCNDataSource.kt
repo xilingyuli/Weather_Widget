@@ -2,10 +2,9 @@ package com.xilingyuli.weather.data.datasource
 
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
+import com.xilingyuli.weather.data.model.WeatherCurrent
 import com.xilingyuli.weather.data.model.WeatherDaily
-import com.xilingyuli.weather.data.model.WeatherHourly
 import com.xilingyuli.weather.data.model.WeatherLocation
-import com.xilingyuli.weather.data.model.WeatherNow
 import com.xilingyuli.weather.data.model.WcnLocation
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -19,14 +18,14 @@ class WeatherCNDataSource(
     private val gson = Gson()
     private val baseUrl = "https://openapi.weathercn.com"
 
-    override suspend fun getCurrentWeather(location: WeatherLocation): Result<WeatherNow> = runCatching {
+    override suspend fun getCurrentWeather(location: WeatherLocation): Result<WeatherCurrent> = runCatching {
         val locationKey = getLocationKey(location)
         val url = "$baseUrl/currentconditions/v1/$locationKey?apikey=$apiKey&language=zh-cn&details=true"
         val response = client.newCall(Request.Builder().url(url).get().build()).execute()
         val body = response.body?.string() ?: throw Exception("Empty response")
         val items = gson.fromJson(body, Array<WcnCurrentResponse>::class.java)
         val item = items.first()
-        item.toWeatherNow()
+        item.toWeatherCurrent(location)
     }
 
     override suspend fun getDailyForecast(location: WeatherLocation, days: Int): Result<List<WeatherDaily>> = runCatching {
@@ -41,10 +40,10 @@ class WeatherCNDataSource(
         val response = client.newCall(Request.Builder().url(url).get().build()).execute()
         val body = response.body?.string() ?: throw Exception("Empty response")
         val forecast = gson.fromJson(body, WcnDailyForecastResponse::class.java)
-        forecast.DailyForecasts.map { it.toWeatherDaily() }
+        forecast.DailyForecasts.map { it.toWeatherDaily(location) }
     }
 
-    override suspend fun getHourlyForecast(location: WeatherLocation, hours: Int): Result<List<WeatherHourly>> = runCatching {
+    override suspend fun getHourlyForecast(location: WeatherLocation, hours: Int): Result<List<WeatherCurrent>> = runCatching {
         val locationKey = getLocationKey(location)
         val hourParam = when {
             hours <= 1 -> 1
@@ -57,7 +56,7 @@ class WeatherCNDataSource(
         val response = client.newCall(Request.Builder().url(url).get().build()).execute()
         val body = response.body?.string() ?: throw Exception("Empty response")
         val items = gson.fromJson(body, Array<WcnHourlyResponse>::class.java)
-        items.map { it.toWeatherHourly() }
+        items.map { it.toWeatherCurrent(location) }
     }
 
     private fun getLocationKey(location: WeatherLocation): String {
@@ -84,23 +83,29 @@ class WeatherCNDataSource(
         @SerializedName("UVIndex") var uvIndex: Int = 0
         @SerializedName("MobileLink") var mobileLink: String = ""
 
-        fun toWeatherNow(): WeatherNow {
+        fun toWeatherCurrent(location: WeatherLocation): WeatherCurrent {
             val sourceName = localSource?.Name ?: "Huafeng"
             val condition = localSource?.WeatherCode?.let { code ->
                 wcnWeatherCodes[code] ?: weatherText
             } ?: weatherText
-            return WeatherNow(
-                temp = temperature.Metric?.Value ?: 0.0,
-                feelsLike = realFeelTemperature.Metric?.Value ?: temperature.Metric?.Value ?: 0.0,
+            val windLevel = localSource?.WindLevel
+            return WeatherCurrent(
                 condition = condition,
-                humidity = relativeHumidity,
+                windDir = wind.Direction?.Localized?.ifBlank { null },
                 windSpeed = wind.Speed?.Metric?.Value ?: 0.0,
-                windDir = wind.Direction?.Localized ?: "",
-                pressure = pressure.Metric?.Value ?: 0.0,
+                windScale = windLevel?.ifBlank { null },
                 precip = precip1hr.Metric?.Value ?: 0.0,
-                visibility = visibility.Metric?.Value ?: 0.0,
+                humidity = relativeHumidity,
+                pressure = pressure.Metric?.Value,
+                visibility = visibility.Metric?.Value,
                 cloudCover = cloudCover,
-                updateTime = localObservationDateTime,
+                validTime = localObservationDateTime.ifBlank { null },
+                location = location,
+                temp = temperature.Metric?.Value ?: 0.0,
+                feelsLike = realFeelTemperature.Metric?.Value,
+                pop = null,
+                dewPoint = null,
+                updateTime = localObservationDateTime.ifBlank { null },
                 sourceLabel = "华风天气",
             )
         }
@@ -148,17 +153,25 @@ class WeatherCNDataSource(
         @SerializedName("Night") var Night: WcnDayNight = WcnDayNight()
         @SerializedName("AirAndPollen") var AirAndPollen: List<WcnPollen> = emptyList()
 
-        fun toWeatherDaily(): WeatherDaily {
+        fun toWeatherDaily(location: WeatherLocation): WeatherDaily {
             return WeatherDaily(
-                date = Date.take(10),
+                condition = Day.IconPhrase.ifBlank { Night.IconPhrase },
+                windDir = Day.Wind?.Direction?.Localized?.ifBlank { null },
+                windSpeed = Day.Wind?.Speed?.Metric?.Value ?: 0.0,
+                windScale = Day.Wind?.Speed?.Metric?.Value?.toString()?.ifBlank { null },
+                precip = Day.TotalLiquid?.Value ?: 0.0,
+                humidity = null,
+                pressure = null,
+                visibility = null,
+                cloudCover = null,
+                validTime = Date.take(10).ifBlank { null },
+                location = location,
                 tempMax = Temperature.Maximum?.Value ?: 0.0,
                 tempMin = Temperature.Minimum?.Value ?: 0.0,
-                conditionDay = Day.IconPhrase,
-                conditionNight = Night.IconPhrase,
-                windDir = Day.Wind?.Direction?.Localized ?: "",
-                windScale = Day.Wind?.Speed?.Metric?.Value?.toString() ?: "",
-                precip = Day.TotalLiquid?.Value ?: 0.0,
-                uvIndex = 0,
+                conditionNight = Night.IconPhrase.ifBlank { null },
+                uvIndex = null,
+                sunrise = null,
+                sunset = null,
             )
         }
     }
@@ -190,16 +203,27 @@ class WeatherCNDataSource(
         @SerializedName("IsDaylight") var IsDaylight: Boolean = true
         @SerializedName("Temperature") var Temperature: WcnMetricValue? = null
         @SerializedName("Wind") var Wind: WcnWind? = null
+        @SerializedName("PrecipitationProbability") var PrecipitationProbability: Int = 0
 
-        fun toWeatherHourly(): WeatherHourly {
-            return WeatherHourly(
-                time = DateTime,
-                temp = Temperature?.Value ?: 0.0,
+        fun toWeatherCurrent(location: WeatherLocation): WeatherCurrent {
+            return WeatherCurrent(
                 condition = IconPhrase,
-                windDir = Wind?.Direction?.Localized ?: "",
-                windScale = Wind?.Speed?.Metric?.Value?.toString() ?: "",
+                windDir = Wind?.Direction?.Localized?.ifBlank { null },
+                windSpeed = Wind?.Speed?.Metric?.Value ?: 0.0,
+                windScale = Wind?.Speed?.Metric?.Value?.toString()?.ifBlank { null },
                 precip = 0.0,
-                pop = 0,
+                humidity = null,
+                pressure = null,
+                visibility = null,
+                cloudCover = null,
+                validTime = DateTime.ifBlank { null },
+                location = location,
+                temp = Temperature?.Value ?: 0.0,
+                feelsLike = null,
+                pop = if (PrecipitationProbability > 0) PrecipitationProbability else null,
+                dewPoint = null,
+                updateTime = null,
+                sourceLabel = "",
             )
         }
     }
